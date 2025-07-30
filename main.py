@@ -1,8 +1,5 @@
-from config.api_keys import config
-
-def main():
-    print(config["TELEGRAM_BOT_TOKEN"])
-
+from bot.bot_init import bot
 
 if __name__ == "__main__":
-    main()
+    print("Starting the bot....")
+    bot.run_polling()
