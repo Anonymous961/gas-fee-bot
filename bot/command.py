@@ -33,8 +33,17 @@ def gas_chain_keyboard():
         [
             InlineKeyboardButton("BSC", callback_data="bsc_track_gas"),
             InlineKeyboardButton("Polygon", callback_data="matic_track_gas")
-        ]
+        ],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ])
+
+def back_refresh_keyboard():
+    return InlineKeyboardMarkup(
+        [[
+            InlineKeyboardButton("🔁 Refresh", callback_data="refresh"),
+            InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_tracker")
+        ]]
+    )
 
 def format_gas_fee_message(chain_key: str, gas_fee: dict) -> str:
     chain_name = CHAIN_NAMES.get(chain_key, chain_key)
@@ -66,7 +75,7 @@ async def show_gas_fee(query, chain_key: str):
         text = format_gas_fee_message(chain_key, gas_fee)
     except Exception as e:
         text = f"Error fetching gas fee: {e}"
-    await query.edit_message_text(text, parse_mode='Markdown')
+    await query.edit_message_text(text,reply_markup=back_refresh_keyboard(), parse_mode='Markdown')
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all button presses."""
@@ -82,6 +91,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data in ["eth_track_gas", "bsc_track_gas", "matic_track_gas"]:
         # Extract chain key
         key = query.data.split('_')[0]
+        context.user_data["last_chain"]=key
         await show_gas_fee(query, key)
     elif query.data == "set_alert":
         await query.edit_message_text("🚨 Gas tracking alert set!")
@@ -89,6 +99,32 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("⚙️ Here are your settings")
     elif query.data == "help":
         await query.edit_message_text("ℹ️ Here is your help section")
+    elif query.data == "back_to_tracker":
+        await query.edit_message_text(
+            text="Select a chain to track:",
+            reply_markup=gas_chain_keyboard(),
+            parse_mode='Markdown'
+        )
+    elif query.data == "refresh":
+        key = context.user_data.get("last_chain")
+        if key:
+            await show_gas_fee(query,key)
+        else:
+            await query.edit_message_text(
+                "Could not refresh: missing chain info.\nPlease select a chain again.",
+            reply_markup=gas_chain_keyboard(),
+            parse_mode='Markdown'
+            )
+    elif query.data == 'back_to_menu':
+        await query.edit_message_text(
+            text=(
+                f"👋 Welcome {update.effective_user.first_name} to the Cross-Chain Gas Fee Tracker!!\n"
+                "Get real-time gas fee updates across *Ethereum*, *BSC*, and *Polygon*.\n"
+                "Choose an option below to get started."
+            ),
+            reply_markup=main_menu_keyboard(),
+            parse_mode='Markdown'
+        )
     else:
         await query.edit_message_text("Unknown action.")
 
