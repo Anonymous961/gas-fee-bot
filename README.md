@@ -3,7 +3,7 @@
 
 A Telegram bot that monitors real-time gas fees across multiple blockchains (Ethereum, BSC, Polygon, etc.) and sends alerts when fees drop below user-defined thresholds.
 
-![Bot Demo](https://i.imgur.com/JQ7w3bn.gif) *(Example screenshot placeholder)*
+![alt text](image.png)
 
 ## ✨ Features
 
