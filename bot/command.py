@@ -1,6 +1,7 @@
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CommandHandler, ContextTypes, Application, CallbackQueryHandler
+from telegram.ext import CommandHandler, ContextTypes, Application, CallbackQueryHandler, MessageHandler, filters
 from core.gas_tracker import get_gas_price
+import sqlite3
 
 # Use a dict for chain mapping
 CHAIN_IDS = {
@@ -45,6 +46,17 @@ def back_refresh_keyboard():
         ]]
     )
 
+def setalert_keyboard():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍 Ethereum", callback_data="setalert_eth")],
+        [
+            InlineKeyboardButton("BSC", callback_data="setalert_bsc"),
+            InlineKeyboardButton("Polygon", callback_data="setalert_matic")
+        ],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
+    ])
+
+
 def format_gas_fee_message(chain_key: str, gas_fee: dict) -> str:
     chain_name = CHAIN_NAMES.get(chain_key, chain_key)
     return (
@@ -77,6 +89,40 @@ async def show_gas_fee(query, chain_key: str):
         text = f"Error fetching gas fee: {e}"
     await query.edit_message_text(text,reply_markup=back_refresh_keyboard(), parse_mode='Markdown')
 
+async def setalert(query):
+    await query.edit_message_text("🪙 Choose a chain:", reply_markup=setalert_keyboard())
+
+async def handle_gwei_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id= update.effective_user.id
+    chat_id= update.effective_chat.id
+    text = update.message.text
+    chain = context.user_data.get("alert_chain")
+
+    if not chain:
+        return await update.message.reply_text("⚠️ Use /start and go through 'Set Gas Alert' first.")
+    
+    try:
+        threshold = int(text)
+    except ValueError:
+        return await update.message.reply_text("❌ Please send a valid number (Gwei).")
+    conn = sqlite3.connect("data/alerts.db")
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO alerts (user_id, chat_id, chain, threshold, notified)
+        VALUES (?, ?, ?, ?, 0)
+    """, (user_id, chat_id, chain, threshold))
+    conn.commit()
+    conn.close()
+
+    await update.message.reply_text(
+        f"✅ Alert set for *{CHAIN_NAMES[chain]}* when gas < {threshold} Gwei!",
+        parse_mode="Markdown"
+    )
+
+    # Cleanup
+    context.user_data.pop("alert_chain", None)
+
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all button presses."""
     query = update.callback_query
@@ -94,7 +140,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["last_chain"]=key
         await show_gas_fee(query, key)
     elif query.data == "set_alert":
-        await query.edit_message_text("🚨 Gas tracking alert set!")
+        await setalert(query)
+    elif query.data.startswith("setalert_"):
+        key = query.data.split("_")[1]
+        context.user_data["alert_chain"] = key
+        await query.edit_message_text(f"✍️ Send the Gwei threshold for *{CHAIN_NAMES[key]}*:", parse_mode="Markdown")
     elif query.data == "settings":
         await query.edit_message_text("⚙️ Here are your settings")
     elif query.data == "help":
@@ -132,3 +182,4 @@ def register_handlers(app: Application):
     """Register bot command and callback handlers."""
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gwei_input))

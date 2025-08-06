@@ -201,3 +201,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+alerts
+alerts.db
+data/__init__.py
+
