@@ -16,7 +16,7 @@ def init_db():
             user_id INTEGER,
             chat_id INTEGER,
             chain TEXT,
-            threshold INTEGER,
+            threshold REAL,
             notified INTEGER DEFAULT 0
         )
     """)

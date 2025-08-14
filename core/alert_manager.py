@@ -11,8 +11,38 @@ CHAIN_IDS = {
     'matic': 137
 }
 
-def check_alerts_and_notify(bot: Bot):
+def get_active_chains():
+    """Get list of chains that have active alerts to avoid unnecessary API calls"""
     try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT chain 
+            FROM alerts 
+            WHERE notified = 0
+        """)
+        active_chains = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return active_chains
+    except Exception as e:
+        print(f"Error getting active chains: {e}")
+        return []
+
+def check_alerts_and_notify(bot: Bot):
+    """
+    Check all active alerts and send notifications when gas prices drop below thresholds.
+    All gas prices are in Gwei (not wei).
+    Only checks chains where users have active alerts to save API calls.
+    """
+    try:
+        # Get chains with active alerts to avoid unnecessary API calls
+        active_chains = get_active_chains()
+        if not active_chains:
+            print("💤 No active alerts - skipping gas price check")
+            return
+        
+        print(f"🔍 Checking gas prices for chains with active alerts: {', '.join(active_chains)}")
+        
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT id, user_id, chat_id, chain, threshold FROM alerts WHERE notified = 0")
@@ -27,9 +57,16 @@ def check_alerts_and_notify(bot: Bot):
                     print(f"API error for {chain}: {gas_data['error']}")
                     continue
                 
-                # Calculate current gas price (lowest of the three)
-                current_gas_price = min(float(v) for v in gas_data.values())
+                # Calculate current gas price (lowest of the three) - all values are in Gwei
+                try:
+                    current_gas_price = min(float(v) for v in gas_data.values())
+                except (ValueError, TypeError) as e:
+                    print(f"Error parsing gas price for {chain}: {e}, data: {gas_data}")
+                    continue
                 
+                print(f"Chain: {chain}, Current: {current_gas_price:.3f} Gwei, Threshold: {threshold} Gwei")
+                
+                # Compare Gwei to Gwei (both are in the same unit)
                 if current_gas_price <= threshold:
                     try:
                         # Use asyncio.run to run the async bot.send_message in a new event loop
@@ -37,10 +74,11 @@ def check_alerts_and_notify(bot: Bot):
                             chat_id=chat_id,
                             text=(
                                 f"🚨 *Gas Alert!*\n"
-                                f"Chain: *{chain}*\n"
-                                f"Current gas price: *{current_gas_price:.2f} Gwei*\n"
+                                f"Chain: *{chain.upper()}*\n"
+                                f"Current gas price: *{current_gas_price:.3f} Gwei*\n"
                                 f"Threshold: *{threshold} Gwei*\n\n"
-                                "You can adjust your alert in the menu below."
+                                f"✅ Gas price is now below your {threshold} Gwei threshold!\n"
+                                "You can adjust your alerts in the menu below."
                             ),
                             parse_mode='Markdown'
                         ))
