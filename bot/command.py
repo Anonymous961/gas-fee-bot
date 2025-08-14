@@ -1,5 +1,5 @@
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CommandHandler, ContextTypes, Application, CallbackQueryHandler, MessageHandler, filters
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot
+from telegram.ext import CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from core.gas_tracker import get_gas_price
 import sqlite3
 
@@ -92,6 +92,20 @@ async def show_gas_fee(query, chain_key: str):
 async def setalert(query):
     await query.edit_message_text("🪙 Choose a chain:", reply_markup=setalert_keyboard())
 
+async def send_gas_alert(bot, chat_id: int, chain: str, current_gas_price: float, threshold: float):
+    """Send a gas alert to a specific user"""
+    await bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"🚨 *Gas Alert!*\n"
+            f"Chain: *{chain}*\n"
+            f"Current gas price: *{current_gas_price:.2f} Gwei*\n"
+            f"Threshold: *{threshold} Gwei*\n\n"
+            "You can adjust your alert in the menu below."
+        ),
+        parse_mode='Markdown'
+    )
+
 async def handle_gwei_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id= update.effective_user.id
     chat_id= update.effective_chat.id
@@ -178,7 +192,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.edit_message_text("Unknown action.")
 
-def register_handlers(app: Application):
+def register_handlers(app):
     """Register bot command and callback handlers."""
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
