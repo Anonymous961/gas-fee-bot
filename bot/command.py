@@ -312,7 +312,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if 'error' not in gas_data:
                 current_gas = min(float(v) for v in gas_data.values())
                 gas_emoji = get_gas_emoji(current_gas)
-                status_text += f"{chain_emoji} {chain_emoji} *{chain_name}*: {gas_emoji} *{current_gas:.2f} Gwei*\n"
+                status_text += f"{chain_emoji} *{chain_name}*: {gas_emoji} *{current_gas:.2f} Gwei*\n"
             else:
                 status_text += f"{chain_emoji} *{chain_name}*: ⚠️ API Error\n"
         except Exception as e:
@@ -411,6 +411,63 @@ async def handle_gwei_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Cleanup
     context.user_data.pop("alert_chain", None)
+    
+ADMIN_IDS = [1152109549]
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin-only command to show bot statistics"""
+    if update.effective_user.id not in ADMIN_IDS:
+        await update.message.reply_text("🚫 This command is for admins only.")
+        return
+    
+    try:
+        conn = sqlite3.connect("data/alerts.db")
+        cursor = conn.cursor()
+        
+        # Get user count
+        cursor.execute("SELECT COUNT(DISTINCT user_id) FROM alerts")
+        user_count = cursor.fetchone()[0]
+        
+        # Get alert counts
+        cursor.execute("SELECT COUNT(*) FROM alerts")
+        total_alerts = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM alerts WHERE notified = 1")
+        triggered_alerts = cursor.fetchone()[0]
+        
+        # Get chain distribution
+        cursor.execute("""
+            SELECT chain, COUNT(*) as count 
+            FROM alerts 
+            GROUP BY chain
+        """)
+        chain_stats = cursor.fetchall()
+        
+        conn.close()
+        
+        # Format message
+        message = (
+            "📊 *Bot Statistics*\n\n"
+            f"👥 Total Users: *{user_count}*\n"
+            f"🔔 Total Alerts: *{total_alerts}*\n"
+            f"🚨 Triggered Alerts: *{triggered_alerts}*\n\n"
+            "*Chain Distribution:*\n"
+        )
+        
+        for chain, count in chain_stats:
+            chain_emoji = CHAIN_EMOJIS.get(chain, "🔗")
+            chain_name = CHAIN_NAMES.get(chain, chain)
+            message += f"{chain_emoji} {chain_name}: *{count} alerts*\n"
+        
+        await update.message.reply_text(
+            text=message,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ Error fetching stats: {str(e)}",
+            parse_mode='Markdown'
+        )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all button presses."""
@@ -488,5 +545,6 @@ def register_handlers(app):
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("myalerts", myalerts_command))
+    app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_gwei_input))
